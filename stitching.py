@@ -5,6 +5,7 @@ import inspect
 from PIL import Image
 
 path = './images/'
+
 images = []  
 print(inspect.getfile(os))
 
