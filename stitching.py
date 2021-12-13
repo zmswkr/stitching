@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import glob, os
 
 path = './sk2'
-img_list = []
+img_list = [ ]
 IMG_NAME = 'boat'
 
 vidcap = cv2.VideoCapture('./124.avi')
