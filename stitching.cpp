@@ -2,28 +2,35 @@
 #include <math.h>
 #include <time.h>
 
-#define WIDE 320
-#define HEIGHT 180
-#define PAN 58.2
-#define TILT 34.0
-#define PI 3.1415926
-
+const int WIDE = 320;
+const int HEIGHT = 180;
+const int PICTURE_X = 8; // The number of x-axis photos.
+const int PICTURE_Y = 4; // The number of y-axis photos.
+const float PAN = 58.2f; // CAMERA FOV's WIDE 
+const float TILT = 34.0f; // CAMERA FOV's HEIGHT
+const float APPLY_WIDE = 45.0f; // 0~360, APPLY_WIDE<=FOV_WIDE
+const float APPLY_HEIGHT = 26.75f; // 0~90, APPLY_HEIGHT<=FOV_HEIGHT
+const float START_ANGLE = 6.6f; // From 58.2 to 45, 6.6 starts to 51.6 ends.
+const float END_ANGLE = 51.6f;
+const float PI = 3.1415926f;
+const float CIRCLE_R = 500.0f; // FIsheye image's radius, The higher the size, the slower the speed.
+const int FLAG = 0; // The flag is 0: default ,The flag is 1: The highter the graphic but the slower the speed.  
 
 using namespace cv;
 using namespace std;
 
 void findMousePoint(int x, int y) {
 	Mat img;
-	img = imread("./result3/fisheye3.jpg", IMREAD_COLOR);
-	double theta, R, w,t;
-	t = (img.size().height / 2)/(90.0+TILT/2.0);
-	R = img.size().height / 2;
-	x = x - R;
-	y = y - R;
+	img = imread("./result3/fisheye3_6.jpg", IMREAD_COLOR);
+	double theta, r, w, tilt;
+	tilt = (img.size().height / 2) / (90.0 + TILT / 2.0);
+	r = img.size().height / 2;
+	x = x - r;
+	y = y - r;
 	w = sqrt(pow(x, 2) + pow(y, 2));
 	theta = atan2(y, x) * 180 / PI;
 
-	printf("%f %f \n", theta, w / t);
+	printf("%f %f \n", theta, w / tilt);
 }
 
 void onMouse(int event, int x, int y, int flags, void* param) {
@@ -36,169 +43,230 @@ void onMouse(int event, int x, int y, int flags, void* param) {
 
 
 
-Point2f matchFisheyePoint(int i, int j, double R, double cfx, double cfy, double H, double W) {   //i 와이드 j 높이,W둘레
+Point2f matchFisheyePoint(int x, int y, double R, double cfx, double cfy, double H, double W) {   //i 와이드 j 높이,W둘레
 	Point2f fisheyePoint;
 
 	double theta, r, Xf, Yf;
-
-	r = j;
-	theta = (i / W * 2.0 * PI) - (67.5/180.0) * PI;
+	r = y;
+	theta = (x / W * 2.0 * PI) - ((90.0 - (APPLY_WIDE / 2)) / 180.0) * PI;
 	Xf = cfx + r * sin(theta);
 	Yf = cfy + r * cos(theta);
+	if (FLAG == 0){
+		fisheyePoint.x = Xf;
+		fisheyePoint.y = Yf;
+	}
+	else if (FLAG == 1) {
+		fisheyePoint.x = Xf / 2;
+		fisheyePoint.y = Yf / 2;
+	}
+
+	return fisheyePoint;
+}
+
+Point2f carculateCos(int i, int j, double w, double h) {   //i 와이드 j 높이,W둘레
+	Point2f fisheyePoint;
+
+	double Xf;
+	int k;
+	double fi, fj, ow,ogh;
+	
+	fi = i;
+	w = w / PICTURE_X;
+	ow = w;
+	k = i / w;
+	ogh = h / 4;
+	h = h / PICTURE_Y * (PICTURE_Y - 1);
+
+	if (i > w) {
+		fi = i - k * w;
+	}
+	if (j >= h) {
+		fisheyePoint.x = i;
+		fisheyePoint.y = j;
+		return fisheyePoint;
+	}
+
+	fj = -j;
+	fj = fj + h;
+	w = (int)abs(w - (fi * 2))/1;
+
+	Xf = (asin(fj / h) / PI) * w;
+	double cos_x,straightLine;
+	cos_x = (asin(2.0 / 3.0) / PI)*ow ;
+	straightLine= (asin( 2.0 /3.0) / PI) * w;
+	straightLine =(ow/2) - straightLine*(((ow/2)-cos_x)/cos_x);
+
+	int y = -j;
+	y = y + ogh;
+
+	if (j <= ogh && fi >= ow / 2) {
+		Xf = (ow-((y * ((ow / 2) - straightLine) / ogh)+straightLine)) + k*ow ;
+		fisheyePoint.x = Xf;
+		fisheyePoint.y = j;
+
+		return fisheyePoint;
+	}
+	else if (j<= ogh)	{
+		Xf = (y * ((ow / 2) - straightLine) / ogh) + straightLine+k*ow;
+		Xf = Xf ;
+		fisheyePoint.x = Xf;
+		fisheyePoint.y = j;
+
+		return fisheyePoint;
+	}
+
+	if (fi > ow / 2) {
+		Xf =  fi - Xf + k * ow;
+	}
+	else {
+		Xf = fi + Xf + k * ow;
+	}
+
 	fisheyePoint.x = Xf;
-	fisheyePoint.y = Yf;
+	fisheyePoint.y = j;
 
 
 	return fisheyePoint;
 }
 
-
-
-
-
-Mat wraping(Mat src, int a, int W, int H) {
-	vector<Point2f> corners(4);
-
-	double co4 = W;
-	double co1 = cos(37 * PI / 180);
-	double ans = W / ((1 / co1) * co4);
-	ans = 1 - ((1 - ans) / 2);
-	double co3 = cos(64 * PI / 180);
-	double ans2 = W / ((1 / co3) * co4);
-	ans2 = 1 - ((1 - ans2) / 2);                                                                                              
-	double aa = (W * (6.6 / 58.2)) + (W * (45.0 / 58.2) * ans);
-	double aa2 = (W * (6.6 / 58.2)) + (W * (45.0 / 58.2) * ans2);
-
-	if (a == 2) {
-		corners[0] = Point2f(W - aa, H * (7.0 / 34.0));
-		corners[1] = Point2f((W * (6.6 / 58.2)) + (W * (45.0 / 58.2) * ans), H * (7.0 / 34.0));
-		corners[2] = Point2f(W * (6.6 / 58.2), H);
-		corners[3] = Point2f(W * (51.6 / 58.2), H);
-	}
-	else if (a == 1) {
-		corners[0] = Point2f(W - aa2, H * (7.0 / 34.0));
-		corners[1] = Point2f( aa2 , H * (7.0 / 34.0));
-		corners[2] = Point2f(W - aa, H);
-		corners[3] = Point2f(aa, H);
-	}
-	else if (a == 3)
-	{
-		corners[0] = Point2f(W * (6.6 / 58.2), H * (7.0 / 34.0));
-		corners[1] = Point2f(W * (51.6 / 58.2), H * (7.0 / 34.0));
-		corners[2] = Point2f(W * (6.6 / 58.2), H);
-		corners[3] = Point2f(W * (51.6 / 58.2), H);
-	}
-	else {
-		corners[0] = Point2f(W / 2.0 - 80, H * (7.0 / 34.0));
-		corners[1] = Point2f(W / 2.0 + 80, H * (7.0 / 34.0));
-		corners[2] = Point2f(W - aa2, H);
-		corners[3] = Point2f(aa2, H);
-	}
-
-	vector<Point2f> warpCorners(4);
-
-
-	Size warpSize(WIDE, HEIGHT);
-	Mat warpImg(warpSize, src.type());
-	warpCorners[0] = Point2f(0, 0);
-	warpCorners[1] = Point2f(warpImg.cols, 0);
-	warpCorners[2] = Point2f(0, warpImg.rows);
-	warpCorners[3] = Point2f(warpImg.cols, warpImg.rows);
-
-	Mat trans = getPerspectiveTransform(corners, warpCorners);
-	warpPerspective(src, warpImg, trans, warpSize);
-
-	return warpImg;
-
-
-}
-
-
-
-int main(int argc, char** argv) {
-	String path("./image3/*.jpg");
-	vector<String> str;
+void callImg(Mat *src,int size, vector<String> str)
+{
 	clock_t start, finish;
-
+	double duration;
 	start = clock();
-	glob(path, str, false);
-
-	if (str.size() == 0) {
-		cout << "파일이 존재하지 않습니다." << endl;
-	}
-	else {
-		cout << "파일 갯수:" << str.size() << endl;
-	}
-
-	Mat src[32];
-	Mat resu;
 	const char* c;
-	int size = str.size();
-
 
 	for (int i = 0; i < size; i++) {
 		c = str[i].c_str();
 		src[i] = imread(c);
 	}
 
+	finish = clock();
+	duration = (double)(finish - start) / CLOCKS_PER_SEC;
+	printf("Call IMG: %f초 \n", duration);
+}
 
+
+void makePanorama(Mat *src,int size)
+{
+
+	clock_t start, finish;
+	double duration;
+	start = clock();
 	for (int i = 0; i < size; i++) {
-		src[i] = wraping(src[i], i / (size / 4), src[i].size().width, src[i].size().height);
+		resize(src[i], src[i], Size(WIDE, HEIGHT));
+		if (i >= 0 && i < PICTURE_X) {
+			src[i] = src[i](Range(HEIGHT / TILT * (TILT - APPLY_HEIGHT), HEIGHT - 1), Range(WIDE / PAN * START_ANGLE, WIDE / PAN * END_ANGLE));
+		}
+		else {
+			src[i] = src[i](Range(HEIGHT / TILT * (TILT - APPLY_HEIGHT), HEIGHT - 1), Range(WIDE / PAN * START_ANGLE, WIDE / PAN * END_ANGLE));
+		}
 	}
 
-
-	for (int i = 0; i < size / 8; i++) {
-		for (int j = 1; j < size / 4; j++) {
-			hconcat(src[i * 8], src[(i * 8) + j], src[i * 8]);
+	for (int i = 0; i < size / PICTURE_X; i++) {
+		for (int j = 1; j < size / PICTURE_Y; j++) {
+			hconcat(src[i * PICTURE_X], src[(i * PICTURE_X) + j], src[i * PICTURE_X]);
 		}
 		if (i > 0) {
-			vconcat(src[0], src[i * 8], src[0]);
+			vconcat(src[0], src[i * PICTURE_X], src[0]);
 		}
 	}
 
+	finish = clock();
+	duration = (double)(finish - start) / CLOCKS_PER_SEC;
+	printf("Make Panorama: %f초 \n", duration);
 	imwrite("./result3/eye.jpg", src[0]);
-	Mat origin;
+
+
+}
+
+void makeFisheye()
+{
+
+	Mat origin, showcase,result;
+	clock_t start, finish;
+	double duration;
+	start = clock();
 	origin = imread("./result3/eye.jpg", IMREAD_COLOR);
-	imshow("fisheye", origin);
 	imwrite("./result3/origin.jpg", origin);
-	resize(origin, origin, Size(4398, 700));
-	double H, W;
-	double R, cfx, cfy;
-	double We;
+
+	double H, W, R, cfx, cfy, We;
+
+	R = CIRCLE_R;
+	if (FLAG == 1){
+		R = R * 2;
+	}
+	W = 2 * PI * R;
+	resize(origin, origin, Size(W, R));
 
 	H = origin.size().height;
 	W = origin.size().width;
-	R = W / PI / 2.0;
-	
+
 	cfx = R;
 	cfy = R;
 	We = (int)2 * PI * R;
-	resu.create(R * 2 + 1, R * 2 + 1, origin.type()); 
-
+	showcase.create(origin.size().height, origin.size().width, origin.type());
+	showcase = Mat::zeros(origin.size().height, origin.size().width, origin.type());
+	
+	if (FLAG == 1){
+		R = R / 2;
+	}
+	result.create(R *2 + 1, R*2 + 1, origin.type());
+	result = Mat::zeros(R*2 + 1, R*2 + 1, origin.type());
+	
 	for (int i = 0; i < origin.size().width; i++) {
 		for (int j = 0; j < origin.size().height; j++) {
-			resu.at<Vec3b>(matchFisheyePoint(i, j, R, cfx, cfy, R, We)) = origin.at<Vec3b>(Point(i, j));
+			result.at<Vec3b>(matchFisheyePoint(i, j, R, cfx, cfy, R, We)) = origin.at<Vec3b>(carculateCos(i, j, origin.size().width, origin.size().height));
+			showcase.at<Vec3b>(carculateCos(i, j, origin.size().width, origin.size().height)) = origin.at<Vec3b>(carculateCos(i, j, origin.size().width, origin.size().height));
 		}
 	}
 
-	Mat acd;	
-	medianBlur(resu, resu, 3);
+	imshow("show", showcase);
+	imwrite("./result3/showcase_2.jpg", showcase);
+
+	Mat acd;
+	if (FLAG == 0){
+		medianBlur(result, result, 3);
+	}
 	//GaussianBlur(resu, resu, Size(7, 7), 0);
+	//bilateralFilter(result, acd, 6, 25, 25);
+	//resize(result, result, Size(800, 800));
+	imshow("asdd", result);
+	imwrite("./result3/fisheye3_6.jpg", result);
 
-	resize(resu, resu, Size(800, 800));
-	bilateralFilter(resu, acd, 6, 25, 25);
-	imshow("resu", acd);
-	//imshow("aaa", acd);  
-	imwrite("./result3/fisheye3.jpg", resu);
-	
 	finish = clock();
-	double duration = (double)(finish - start) / CLOCKS_PER_SEC;
-	printf("%f초 \n", duration);
-	setMouseCallback("resu", onMouse, 0);
-
-	Mat kernel, kernel2, filter_img, filter_img2;
-
-	
+	duration = (double)(finish - start) / CLOCKS_PER_SEC;
+	printf("Make Fisheye image: %f초 \n", duration);
+	setMouseCallback("asdd", onMouse, 0);
 	waitKey();
+
+}
+
+
+int main(int argc, char** argv) 
+{
+	String path("./image/*.jpg");
+	vector<String> str;
+	glob(path, str, false);
+
+	Mat src[100];
+	Mat result;
+	int size = str.size();
+
+	if (str.size() == 0) {
+		cout << "파일이 존재하지 않습니다." << endl;
+		
+		return 0;
+	}
+	else {
+		cout << "파일 갯수:" << str.size() << endl;
+	}
+
+
+	callImg(src, size, str);
+	makePanorama(src, size);
+	makeFisheye();
+
+
 	return 0;
 }
