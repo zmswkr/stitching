@@ -406,7 +406,6 @@ int main(int argc, char** argv)
 	glob(path, str, false);
 
 	Mat src[100];
-	Mat result;
 	int size = str.size();
 
 	if (str.size() == 0) {
