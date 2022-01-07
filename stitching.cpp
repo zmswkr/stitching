@@ -65,8 +65,10 @@ void cropOverlap(Mat* src, int size)
 	double duration;
 	start = clock();
 	for (int i = 0; i < size; i++) {
-		resize(src[i], src[i], Size(WIDE, HEIGHT)); //사진을 1920, 1080에서 320, 180의 사이즈로 resize 
-		src[i] = src[i](Range(HEIGHT / TILT * (TILT - APPLY_HEIGHT), HEIGHT - 1), Range(WIDE / PAN * ((PAN-APPLY_WIDE)/2.0), WIDE / PAN * (PAN-(PAN - APPLY_WIDE) / 2.0)));
+		resize(src[i], src[i], Size(WIDE, HEIGHT)); 
+		//사진을 1920, 1080에서 320, 180의 사이즈로 resize 
+		src[i] = src[i](Range(HEIGHT / TILT * (TILT - APPLY_HEIGHT), HEIGHT - 1), 
+			Range(WIDE / PAN * ((PAN-APPLY_WIDE)/2.0), WIDE / PAN * (PAN-(PAN - APPLY_WIDE) / 2.0)));
 		// 사진을 찍은 PAN, TILT의 각도를 기존의 화각에서 그 각도만큼 추출
 		// ex) Tilt: 34.0 ~ (34-26.75) = 34.0 ~ 7.25  Pan: (58.2-45)/2 ~ (58.2-(58.2-45))/2 = 6.6 ~ 51.2          
 	}
