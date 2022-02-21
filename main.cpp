@@ -76,7 +76,7 @@ void cropOverlap(Mat* src, int size) {
     int h = CIRCLE_R / PICTURE_Y;
     start = clock();
     for (int i = 0; i < size; i++) {
-        //사진을 1920, 1080에서 320, 180의 사이즈로 resize    
+        //속도를위해 사진을 1920, 1080에서 640, 320의 사이즈로 resize    
         resize(src[i], src[i], Size(640, 360));
         GaussianBlur(src[i], src[i], Size(3, 3), 0);
         //flip(src[i], src[i], -1);
