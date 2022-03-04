@@ -11,13 +11,10 @@ const float APPLY_WIDE = 45.0f; // 0~360, PICTURE_X * APPLY_WIDE = 360 (APPLY_WI
 const float APPLY_HEIGHT = 26.75f; // 0~107, PICTURE_Y * APPLY_HEIGHT = (90+ (Fov of Height / 2))  (APPLY_HEIGHT<=FOV_HEIGHT)
 const float PI = 3.1415926f;
 const float CIRCLE_R = 500.0f; // FIsheye image's radius, The higher the size, the slower the speed.
-const int ESC = 27;
-const float ray = 0.00495;
 using namespace cv;
 using namespace std;
 
 #define RADIAN(d)                   (PI*(d)/180.0)
-//#define RADIAN(d)                   (d)
 void findMousePoint(int x, int y) {
     double theta, r, w, tilt;
     tilt = 500 / (90.0 + TILT / 2.0);
@@ -42,12 +39,10 @@ void onMouse(int event, int x, int y, int flags, void* param) {
     switch (event) {
 
     case EVENT_LBUTTONDOWN:
-        //printf("%d %d\n", x, y);
         findMousePoint(x, y);
         break;
 
     case EVENT_LBUTTONUP:
-        //cout << "Button up mouse left button" << endl;
         break;
 
     }
@@ -76,11 +71,9 @@ void cropOverlap(Mat* src, int size) {
     int h = CIRCLE_R / PICTURE_Y;
     start = clock();
     for (int i = 0; i < size; i++) {
-        //속도를위해 사진을 1920, 1080에서 640, 320의 사이즈로 resize    
+        //사진을 1920, 1080에서 640, 360의 사이즈로 resize (수행 속도를 위함)
         resize(src[i], src[i], Size(640, 360));
         GaussianBlur(src[i], src[i], Size(3, 3), 0);
-        //flip(src[i], src[i], -1);
-
 
     }
 
@@ -93,28 +86,6 @@ void cropOverlap(Mat* src, int size) {
 }
 
 
-void calculPoint2(Mat* panorama, double theta, double t, Point2f fisheyePoint) {
-
-    Point2f fisheyePoint2;
-
-    t = t / 107.0 * 90.0;
-    double r = CIRCLE_R;
-    r = r * sin(RADIAN(t)) / 1;
-    float Cfx = 499.5;
-    float Cfy = 499.5;
-    float Xf = Cfx + r * cos(RADIAN(theta));
-    float Yf = Cfy + r * sin(RADIAN(theta));
-    if (Yf < 0 || Xf < 0)
-    {
-        printf("error");
-    }
-    fisheyePoint2.x = Xf;
-    fisheyePoint2.y = Yf;
-
-    int x = 0;
-    int y = 0;
-
-}
 Point2f findFisheye(int Xe, int Ye, double R, double Cfx, double Cfy, double He, double We) {
 
     Point2f fisheyePoint;
@@ -131,22 +102,20 @@ Point2f findFisheye(int Xe, int Ye, double R, double Cfx, double Cfy, double He,
 }
 
 void panorama() {
-
+    // fisheye 이미지를 input으로 넣어주면 파노라마 형식으로 펴주는 함수
     Mat fisheyeImage, equirectangularImage;
-    const string PATH_IMAGE = "./rere.jpg";
+    const string PATH_IMAGE = "./result.jpg";
     fisheyeImage = imread(PATH_IMAGE, IMREAD_COLOR);
     namedWindow("Fisheye Image", WINDOW_AUTOSIZE);
     imshow("Fisheye Image", fisheyeImage);
 
 
-    int Hf, Wf, He, We;
+    int  He, We;
     double R, Cfx, Cfy;
 
-    Hf = fisheyeImage.size().height;
-    Wf = fisheyeImage.size().width;
-    R = Hf / 2;
-    Cfx = Wf / 2;
-    Cfy = Hf / 2;
+    R = fisheyeImage.size().height / 2;
+    Cfx = fisheyeImage.size().width / 2.0;
+    Cfy = fisheyeImage.size().height / 2.0;
 
     He = (int)R;
     We = (int)2 * PI * R;
@@ -170,14 +139,91 @@ void panorama() {
 
 }
 
+void MakeFisheye(Mat* src, int size) {
+
+    cropOverlap(src, size);
+    clock_t start, finish;
+    double duration;
+    start = clock();
+
+    float u, v;
+    float cx = (src[0].size().width - 1) / 2.0;
+    float cy = (src[0].size().height - 1) / 2.0;
+    float wx, wy, wz, new_p, new_t;
+    Mat result;
+
+    result.create(2 * CIRCLE_R, 2 * CIRCLE_R, src[0].type());
+    result = Mat::zeros(2 * CIRCLE_R, 2 * CIRCLE_R, src[0].type());
+
+
+    static float R = ((float)(src[0].size().width/2.0)) / tanf((float)RADIAN(PAN / 2.0));
+
+    int _cos, _sin, _cos2, _sin2;
+
+    for (int i = 0; i < 8; i++) {
+        for (int m = 0; m < 4; m++) {
+            // PAN 45도 단위로 8장 tilt 26.75도 단위로 4장 총 32장을 도는 for문
+            for (int x = 0; x < src[i].size().width; x++) {
+                for (int y = 0; y < src[i].size().height; y++) {
+                    if (i >= 0) {
+                        u = (cx - x) / R;
+                        v = (cy - y) / R;
+                        _cos = cos(RADIAN(APPLY_WIDE * i)) * 1000;
+                        _cos2 = cos(RADIAN(-(APPLY_HEIGHT * ((PICTURE_Y - 1) - m)))) * 1000;
+                        _sin = sin(RADIAN(APPLY_WIDE * i)) * 1000;
+                        _sin2 = sin(RADIAN(-(APPLY_HEIGHT * ((PICTURE_Y - 1) - m)))) * 1000;
+
+                        wx = _cos / 1000.0 * u - _sin / 1000.0 * _sin2 / 1000.0 * v - _sin / 1000.0 * _cos2 / 1000.0;
+                        wy = _sin / 1000.0 * u + _cos / 1000.0 * _sin2 / 1000.0 * v + _cos / 1000.0 * _cos2 / 1000.0;
+                        wz = 0 - _cos2 / 1000.0 * v + _sin2 / 1000.0;
+                        //행렬 변환을 이용한 3D좌표계 추출
+                        new_p = -atan2(wx, wy) * 180.0 / PI;
+                        new_t = atan2(wz, sqrt(wx * wx + wy * wy)) * 180.0 / PI;
+                        new_t = 90.0 + new_t;
+
+
+                        Point2f fisheyePoint2;
+                        double r = CIRCLE_R;
+                        r = r * new_t / 107.0;
+
+                        float Xf = (result.size().width - 1) / 2.0 + r * cos(RADIAN(new_p));
+                        float Yf = (result.size().height - 1) / 2.0 + r * sin(RADIAN(new_p));
+                        fisheyePoint2.x = Xf;
+                        fisheyePoint2.y = Yf;
+                        if (new_t < 107) {
+
+                            if (result.at<Vec3b>(fisheyePoint2) == result.at<Vec3b>(Point(0, 0))) {
+                                result.at<Vec3b>(fisheyePoint2) = src[m * PICTURE_X + i].at<Vec3b>(Point(x, y));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    //medianBlur(result[0], result[0], 3);
+    //GaussianBlur(result[0], result[0], Size(3, 3), 0);
+    imshow("result", result);
+    imwrite("./result.jpg", result);
+    setMouseCallback("result", onMouse, 0);
+
+    finish = clock();
+    duration = (double)(finish - start) / CLOCKS_PER_SEC;
+
+    printf("Make fisheye IMG: %f초 \n", duration);
+    waitKey();
+}
+
 void reverse(Mat* src, int size) {
 
+    //역방향 미완성 
     clock_t start, finish;
     double duration;
     start = clock();
     Point2f po;
-    float fx = 0.55;  //0.55 : 320 180  0.53 : 1920 1080   0.5115  0.496     0.499
-    float fy = 0.52;  //0.5115
+    float fx = 0.53;  
+    float fy = 0.53; 
     float u, v;
     float cx = (src[0].size().width - 1) / 2.0;
     float cy = (src[0].size().height - 1) / 2.0;
@@ -191,11 +237,9 @@ void reverse(Mat* src, int size) {
     static float R = ((float)(src[0].size().width)) / tanf((float)RADIAN(PAN / 2.0));
     fx = fx * R;
     fy = fy * R;
-    float a2, b2, c2, theta2, tt;
+    float a2, b2, c2, theta2;
     int m2, k2;
     float ptzX, ptzY, wx, wy, wz;
-    int flag = 0;
-    int cc;
     float _cos, _cos2, _sin, _sin2;
     for (int i = 0; i < result.size().height; i++) {
         for (int j = 0; j < result.size().width; j++) {
@@ -246,19 +290,16 @@ void reverse(Mat* src, int size) {
                 new_t = 90.0 + new_t;
                 
                 d = sqrt(u * u + v * v + 1 * 1);
-                //d = src[0].size().width * 1 / cos(RADIAN(tAngle - 90)) / 58.2 * (theta - 22.25 - k2 * 45.0) * 0.000134;
-                //printf("%.3f\n", d);
                 wx = sin(RADIAN(tAngle)) * cos(RADIAN(theta)) * sqrt(d);
                 wy = sin(RADIAN(tAngle)) * sin(RADIAN(theta)) * sqrt(d);
                 wz = cos(RADIAN(tAngle)) * sqrt(d);
                 theta2 = atan2(wy, wx) * 180.0 / PI;
 
                 theta2 = theta2 + 180;
-                tt = tAngle - 90;
                 k2 = theta2 / 45;
                 k2 = k2 - 1;
                 if (k2 == -1) {
-                    k2 = 7;
+                    k2 = 7; 
                 }
                 
                 if (tAngle <= (107.0) && theta <= 360) { //원의 범위에 있다면
@@ -290,89 +331,8 @@ void reverse(Mat* src, int size) {
     }
     Mat kkk;
     imshow("result2", result);
-    imwrite("./ccon25   .jpg", result);
-    //setMouseCallback("result2", onMouse, 0);
-
-    finish = clock();
-    duration = (double)(finish - start) / CLOCKS_PER_SEC;
-
-    printf("Make fisheye IMG: %f초 \n", duration);
-    waitKey();
-}
-
-void MakeFisheye(Mat* src, int size) {
-
-    cropOverlap(src, size);
-    clock_t start, finish;
-    double duration;
-    start = clock();
-    Point2f po;
-    float fx = 0.53;  //0.55 : 320 180  0.53 : 1920 1080   0.5115  0.496     0.499
-    float fy = 0.53;  //0.5115
-    float u, v;
-    float cx = (src[0].size().width - 1) / 2.0;
-    float cy = (src[0].size().height - 1) / 2.0;
-    float wx, wy, wz, new_p, new_t;
-    Mat result;
-
-    result.create(2 * CIRCLE_R, 2 * CIRCLE_R, src[0].type());
-    result = Mat::zeros(2 * CIRCLE_R, 2 * CIRCLE_R, src[0].type());
-
-
-    static float R = ((float)(src[0].size().width)) / tanf((float)RADIAN(PAN / 2.0));
-    fx = fx * R;
-    fy = fy * R;
-    int _cos, _sin,_cos2,_sin2;
-    float roll;
-    for (int i = 0; i < 8; i++) {
-        for (int m = 0; m < 4; m++) {
-            for (int x = 0; x < src[i].size().width; x++) {
-                for (int y = 0; y < src[i].size().height; y++) {
-                    if (i >= 0) {
-                        u = ( cx-x) / fx;
-                        v = ( cy-y) / fy;
-                        _cos = cos(RADIAN(APPLY_WIDE * i)) * 1000;
-                        _cos2 = cos(RADIAN(-(APPLY_HEIGHT * ((PICTURE_Y - 1) - m)))) * 1000;
-                        _sin = sin(RADIAN(APPLY_WIDE * i))*1000;
-                        _sin2 = sin(RADIAN(-(APPLY_HEIGHT * ((PICTURE_Y - 1) - m))))*1000;
-
-                        wx = _cos/1000.0 * u - _sin/1000.0 * _sin2 / 1000.0 * v - _sin / 1000.0 * _cos2 / 1000.0;
-                        wy = _sin / 1000.0 * u + _cos / 1000.0 * _sin2 / 1000.0 * v + _cos / 1000.0 * _cos2 / 1000.0;
-                        wz = 0 - _cos2 / 1000.0 * v + _sin2 / 1000.0;
-                        //행렬 변환을 이용한 3D좌표계 추출
-                        new_p = -atan2(wx, wy) * 180.0 / PI;
-                        new_t = atan2(wz, sqrt(wx * wx + wy * wy)) * 180.0 / PI;
-                        new_t = 90.0 + new_t;
-
-
-                        Point2f fisheyePoint2;
-                        double r = CIRCLE_R;
-                        r = r * new_t / 107.0;
-
-                        float Xf = (result.size().width - 1) / 2.0 + r * cos(RADIAN(new_p));
-                        float Yf = (result.size().height - 1) / 2.0 + r * sin(RADIAN(new_p));
-                        fisheyePoint2.x = Xf;// / 2.0 + (result.size().width / 4.0);
-                        fisheyePoint2.y = Yf;// / 2.0 + (result.size().height / 4.0);
-                        if (new_t < 107) {
-
-                            if (result.at<Vec3b>(fisheyePoint2) == result.at<Vec3b>(Point(0, 0))) {
-                                result.at<Vec3b>(fisheyePoint2) = src[m * PICTURE_X + i].at<Vec3b>(Point(x, y));
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    Mat kkk;
-    //medianBlur(result[0], result[0], 3);
-   // GaussianBlur(result[0], result[0], Size(3, 3), 0);
-    imshow("result", result);
-    //imshow("result2", result[1]);
-    //imwrite("./320_180.jpg", result[0]);
     imwrite("./result.jpg", result);
-    //setMouseCallback("result2", onMouse, 0);
+    setMouseCallback("result2", onMouse, 0);
 
     finish = clock();
     duration = (double)(finish - start) / CLOCKS_PER_SEC;
@@ -380,6 +340,8 @@ void MakeFisheye(Mat* src, int size) {
     printf("Make fisheye IMG: %f초 \n", duration);
     waitKey();
 }
+
+
 
 
 int main() {
@@ -401,7 +363,7 @@ int main() {
 
 
     callImg(src, size, str);
-
+    panorama();
     MakeFisheye(src, size); //정방향
     ///reverse(src, size);    //역방향
 
